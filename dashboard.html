@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📊 매출 대시보드</title>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, onValue, off }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDnyqOJp16jFgTxUzbawrCcwYwX_IMMweQ",
+    authDomain: "ai-mgmt-2026-order-tracking.firebaseapp.com",
+    databaseURL: "https://ai-mgmt-2026-order-tracking-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "ai-mgmt-2026-order-tracking",
+    storageBucket: "ai-mgmt-2026-order-tracking.firebasestorage.app",
+    messagingSenderId: "354942019623",
+    appId: "1:354942019623:web:4688f3b5ac75b763cec602"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
+  window._db  = db;
+  window._ref = ref;
+  window._onValue = onValue;
+  window._off = off;
+  window._fbReady = true;
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family:'Noto Sans KR',sans-serif;
+  background:#0f172a; color:#e2e8f0; min-height:100vh;
+}
+
+/* ── Header ── */
+.header {
+  background:linear-gradient(135deg,#1e40af,#3b82f6);
+  padding:20px 24px; display:flex; align-items:center;
+  justify-content:space-between; flex-wrap:wrap; gap:10px;
+  border-bottom:3px solid #60a5fa;
+}
+.header-left h1 { font-size:22px; font-weight:900; }
+.header-left p  { font-size:12px; opacity:0.8; margin-top:2px; }
+.fb-badge {
+  display:flex; align-items:center; gap:6px;
+  background:rgba(255,255,255,0.15); border-radius:20px; padding:6px 14px;
+  font-size:12px; font-weight:700;
+}
+.fb-dot { width:8px; height:8px; border-radius:50%; background:#aaa; }
+.fb-dot.on  { background:#4eff7e; animation:blink 1.5s infinite; }
+.fb-dot.err { background:#ff4c4c; }
+@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+/* ── Date Picker ── */
+.date-bar {
+  background:#1e293b; padding:14px 24px;
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  border-bottom:1px solid #334155;
+}
+.date-bar label { font-size:13px; font-weight:700; color:#94a3b8; }
+.date-input {
+  background:#0f172a; color:#e2e8f0; border:2px solid #334155;
+  border-radius:8px; padding:8px 12px; font-size:14px;
+  font-family:'Noto Sans KR',sans-serif; outline:none;
+}
+.date-input:focus { border-color:#3b82f6; }
+.today-btn {
+  background:#3b82f6; color:white; border:none; border-radius:8px;
+  padding:8px 16px; font-size:13px; font-weight:700;
+  font-family:'Noto Sans KR',sans-serif; cursor:pointer;
+}
+.today-btn:hover { background:#2563eb; }
+.refresh-btn {
+  background:#10b981; color:white; border:none; border-radius:8px;
+  padding:8px 16px; font-size:13px; font-weight:700;
+  font-family:'Noto Sans KR',sans-serif; cursor:pointer; margin-left:auto;
+}
+
+/* ── KPI Cards ── */
+.kpi-grid {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:16px; padding:20px 24px;
+}
+.kpi-card {
+  background:#1e293b; border:1px solid #334155; border-radius:12px; padding:18px;
+  position:relative; overflow:hidden;
+}
+.kpi-card::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:3px;
+}
+.kpi-card.blue::before   { background:#3b82f6; }
+.kpi-card.green::before  { background:#10b981; }
+.kpi-card.yellow::before { background:#f59e0b; }
+.kpi-card.red::before    { background:#ef4444; }
+.kpi-card.purple::before { background:#8b5cf6; }
+
+.kpi-icon  { font-size:28px; margin-bottom:8px; }
+.kpi-label { font-size:11px; color:#94a3b8; font-weight:700; letter-spacing:0.5px; margin-bottom:4px; }
+.kpi-value { font-size:26px; font-weight:900; line-height:1; }
+.kpi-sub   { font-size:11px; color:#64748b; margin-top:4px; }
+
+/* ── 탭 ── */
+.tabs {
+  display:flex; gap:0; padding:0 24px; border-bottom:2px solid #334155;
+}
+.tab {
+  padding:12px 20px; font-size:13px; font-weight:700; cursor:pointer;
+  color:#64748b; border-bottom:3px solid transparent; margin-bottom:-2px;
+  transition:all 0.2s;
+}
+.tab.active { color:#3b82f6; border-bottom-color:#3b82f6; }
+.tab:hover  { color:#94a3b8; }
+
+/* ── 주문 목록 ── */
+.section { padding:20px 24px; }
+.section-title {
+  font-size:15px; font-weight:900; margin-bottom:14px;
+  display:flex; align-items:center; gap:8px;
+}
+
+.order-table { width:100%; border-collapse:collapse; }
+.order-table th {
+  background:#1e293b; color:#94a3b8; font-size:11px; font-weight:700;
+  padding:10px 12px; text-align:left; border-bottom:2px solid #334155;
+  letter-spacing:0.5px;
+}
+.order-table td {
+  padding:12px; border-bottom:1px solid #1e293b; font-size:13px;
+  vertical-align:top;
+}
+.order-table tr:hover td { background:#1e293b55; }
+
+.status-badge {
+  display:inline-block; padding:3px 10px; border-radius:12px;
+  font-size:11px; font-weight:700;
+}
+.status-badge.waiting { background:#78350f33; color:#fbbf24; border:1px solid #92400e; }
+.status-badge.paid    { background:#05603533; color:#34d399; border:1px solid #065f46; }
+
+.order-items-list { font-size:11px; color:#94a3b8; line-height:1.8; }
+.amount-cell { font-weight:900; color:#60a5fa; }
+
+/* ── 메뉴별 통계 ── */
+.menu-stat-grid {
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+  gap:12px;
+}
+.menu-stat-card {
+  background:#1e293b; border:1px solid #334155; border-radius:10px; padding:14px;
+}
+.menu-stat-name  { font-size:13px; font-weight:700; margin-bottom:6px; }
+.menu-stat-bar   { background:#0f172a; border-radius:4px; height:6px; margin:6px 0; overflow:hidden; }
+.menu-stat-fill  { height:100%; background:#3b82f6; border-radius:4px; transition:width 0.6s ease; }
+.menu-stat-nums  { display:flex; justify-content:space-between; font-size:11px; color:#64748b; }
+
+/* ── 빈 상태 ── */
+.empty-state {
+  text-align:center; padding:60px 20px; color:#475569;
+}
+.empty-state .icon { font-size:48px; margin-bottom:12px; }
+.empty-state p { font-size:14px; }
+
+/* ── 로딩 ── */
+.loading {
+  display:flex; align-items:center; justify-content:center;
+  padding:40px; gap:12px; color:#64748b;
+}
+.spinner {
+  width:28px; height:28px; border:3px solid #334155;
+  border-top-color:#3b82f6; border-radius:50%;
+  animation:spin 0.8s linear infinite;
+}
+@keyframes spin { to{transform:rotate(360deg);} }
+
+/* ── 탭 콘텐츠 ── */
+.tab-content { display:none; }
+.tab-content.active { display:block; }
+
+/* 반응형 */
+@media (max-width:600px) {
+  .order-table { font-size:11px; }
+  .order-table th, .order-table td { padding:8px 6px; }
+  .kpi-value { font-size:20px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-left">
+    <h1>📊 매출 대시보드</h1>
+    <p>AI경영학과 메뉴판 주문 실시간 관리</p>
+  </div>
+  <div class="fb-badge">
+    <div class="fb-dot" id="fbDot"></div>
+    <span id="fbStatus">연결 중...</span>
+  </div>
+</div>
+
+<!-- Date Bar -->
+<div class="date-bar">
+  <label>📅 조회 날짜</label>
+  <input type="date" class="date-input" id="dateInput">
+  <button class="today-btn" onclick="goToday()">오늘</button>
+  <button class="today-btn" style="background:#6366f1;" onclick="loadDate()">조회</button>
+  <button class="refresh-btn" onclick="loadDate()">🔄 새로고침</button>
+</div>
+
+<!-- KPI -->
+<div class="kpi-grid">
+  <div class="kpi-card blue">
+    <div class="kpi-icon">🧾</div>
+    <div class="kpi-label">총 주문 건수</div>
+    <div class="kpi-value" id="kpiTotal">-</div>
+    <div class="kpi-sub">건</div>
+  </div>
+  <div class="kpi-card green">
+    <div class="kpi-icon">💰</div>
+    <div class="kpi-label">총 매출액</div>
+    <div class="kpi-value" id="kpiRevenue">-</div>
+    <div class="kpi-sub">원</div>
+  </div>
+  <div class="kpi-card yellow">
+    <div class="kpi-icon">✅</div>
+    <div class="kpi-label">입금 완료</div>
+    <div class="kpi-value" id="kpiPaid">-</div>
+    <div class="kpi-sub">건 / <span id="kpiPaidAmt">-</span>원</div>
+  </div>
+  <div class="kpi-card red">
+    <div class="kpi-icon">⏳</div>
+    <div class="kpi-label">입금 대기</div>
+    <div class="kpi-value" id="kpiWaiting">-</div>
+    <div class="kpi-sub">건 / <span id="kpiWaitAmt">-</span>원</div>
+  </div>
+  <div class="kpi-card purple">
+    <div class="kpi-icon">🍽️</div>
+    <div class="kpi-label">판매 메뉴 수</div>
+    <div class="kpi-value" id="kpiItems">-</div>
+    <div class="kpi-sub">가지</div>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('orders')">📋 주문 목록</div>
+  <div class="tab" onclick="switchTab('menu')">🍽️ 메뉴별 통계</div>
+</div>
+
+<!-- 주문 목록 탭 -->
+<div class="tab-content active" id="tab-orders">
+  <div class="section">
+    <div class="section-title">
+      📋 주문 목록
+      <span id="orderCountBadge" style="background:#3b82f6;color:white;font-size:11px;padding:2px 8px;border-radius:10px;">0건</span>
+    </div>
+    <div id="orderListArea">
+      <div class="loading"><div class="spinner"></div> 데이터 불러오는 중...</div>
+    </div>
+  </div>
+</div>
+
+<!-- 메뉴별 통계 탭 -->
+<div class="tab-content" id="tab-menu">
+  <div class="section">
+    <div class="section-title">🍽️ 메뉴별 판매 현황</div>
+    <div id="menuStatArea">
+      <div class="loading"><div class="spinner"></div> 데이터 불러오는 중...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentOrders = [];
+let currentDateKey = '';
+let unsubscribe = null;
+
+// ── 날짜 초기화
+function todayKey() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  return `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+}
+
+function goToday() {
+  document.getElementById('dateInput').value = todayKey();
+  loadDate();
+}
+
+function loadDate() {
+  const dateKey = document.getElementById('dateInput').value;
+  if (!dateKey) return;
+  currentDateKey = dateKey;
+
+  // 기존 구독 해제
+  if (unsubscribe && window._off) {
+    window._off(window._ref(window._db, `orders/${currentDateKey}`));
+    unsubscribe = null;
+  }
+  subscribeOrders(dateKey);
+}
+
+// ── Firebase 실시간 구독
+function subscribeOrders(dateKey) {
+  if (!window._fbReady) {
+    setTimeout(() => subscribeOrders(dateKey), 400);
+    return;
+  }
+  const ordersRef = window._ref(window._db, `orders/${dateKey}`);
+  window._onValue(ordersRef, snapshot => {
+    const data = snapshot.val();
+    currentOrders = data
+      ? Object.entries(data).map(([key, val]) => ({ key, ...val }))
+          .sort((a,b) => (b.orderedAt||'').localeCompare(a.orderedAt||''))
+      : [];
+    renderAll();
+  });
+  setFbStatus('connected');
+}
+
+// ── Firebase 상태
+function setFbStatus(state) {
+  const dot  = document.getElementById('fbDot');
+  const text = document.getElementById('fbStatus');
+  if (state === 'connected') { dot.className='fb-dot on'; text.textContent='실시간 연결됨'; }
+  else                        { dot.className='fb-dot err'; text.textContent='연결 오류'; }
+}
+
+let fbWait = setInterval(() => {
+  if (window._fbReady) { clearInterval(fbWait); setFbStatus('connected'); }
+}, 300);
+
+// ── KPI 계산 & 렌더
+function renderAll() {
+  const orders  = currentOrders;
+  const total   = orders.length;
+  const revenue = orders.reduce((s,o) => s+(o.totalAmount||0), 0);
+  const paid    = orders.filter(o => o.payStatus==='paid');
+  const waiting = orders.filter(o => o.payStatus!=='paid');
+  const paidAmt = paid.reduce((s,o)=>s+(o.totalAmount||0),0);
+  const waitAmt = waiting.reduce((s,o)=>s+(o.totalAmount||0),0);
+
+  // 메뉴 종류 수
+  const menuSet = new Set();
+  orders.forEach(o => (o.items||[]).forEach(i => menuSet.add(i.id)));
+
+  document.getElementById('kpiTotal').textContent   = total;
+  document.getElementById('kpiRevenue').textContent = revenue.toLocaleString();
+  document.getElementById('kpiPaid').textContent    = paid.length;
+  document.getElementById('kpiPaidAmt').textContent = paidAmt.toLocaleString();
+  document.getElementById('kpiWaiting').textContent = waiting.length;
+  document.getElementById('kpiWaitAmt').textContent = waitAmt.toLocaleString();
+  document.getElementById('kpiItems').textContent   = menuSet.size;
+
+  document.getElementById('orderCountBadge').textContent = total + '건';
+
+  renderOrderList(orders);
+  renderMenuStats(orders);
+}
+
+// ── 주문 목록
+function renderOrderList(orders) {
+  const area = document.getElementById('orderListArea');
+  if (orders.length === 0) {
+    area.innerHTML = `<div class="empty-state"><div class="icon">🍄</div><p>해당 날짜에 주문이 없어요</p></div>`;
+    return;
+  }
+  area.innerHTML = `
+    <div style="overflow-x:auto;">
+    <table class="order-table">
+      <thead>
+        <tr>
+          <th>시간</th>
+          <th>주문번호</th>
+          <th>주문자</th>
+          <th>주문 내역</th>
+          <th>금액</th>
+          <th>결제</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${orders.map(o => {
+          const time = o.orderedAt ? new Date(o.orderedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}) : '-';
+          const itemsList = (o.items||[]).map(i => `${i.name} ×${i.qty}`).join('<br>');
+          const statusClass = o.payStatus === 'paid' ? 'paid' : 'waiting';
+          const statusText  = o.payStatus === 'paid' ? '✅ 입금완료' : '⏳ 대기중';
+          return `
+            <tr>
+              <td style="white-space:nowrap;color:#94a3b8;">${time}</td>
+              <td style="font-size:10px;color:#64748b;">${(o.orderId||'-').replace('ORD-','')}</td>
+              <td style="font-weight:700;">${o.customerName||'손님'}</td>
+              <td><div class="order-items-list">${itemsList}</div></td>
+              <td class="amount-cell">${(o.totalAmount||0).toLocaleString()}원</td>
+              <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+            </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    </div>
+  `;
+}
+
+// ── 메뉴별 통계
+function renderMenuStats(orders) {
+  const area = document.getElementById('menuStatArea');
+  if (orders.length === 0) {
+    area.innerHTML = `<div class="empty-state"><div class="icon">📊</div><p>데이터가 없어요</p></div>`;
+    return;
+  }
+
+  // 집계
+  const menuMap = {};
+  orders.forEach(o => {
+    (o.items||[]).forEach(i => {
+      if (!menuMap[i.name]) menuMap[i.name] = { qty:0, revenue:0 };
+      menuMap[i.name].qty     += i.qty;
+      menuMap[i.name].revenue += i.subtotal || (i.price * i.qty);
+    });
+  });
+
+  const sorted = Object.entries(menuMap).sort((a,b) => b[1].qty - a[1].qty);
+  const maxQty = sorted[0]?.[1].qty || 1;
+
+  area.innerHTML = `<div class="menu-stat-grid">
+    ${sorted.map(([name, stat]) => `
+      <div class="menu-stat-card">
+        <div class="menu-stat-name">${name}</div>
+        <div class="menu-stat-bar">
+          <div class="menu-stat-fill" style="width:${Math.round(stat.qty/maxQty*100)}%"></div>
+        </div>
+        <div class="menu-stat-nums">
+          <span>📦 ${stat.qty}개</span>
+          <span>💰 ${stat.revenue.toLocaleString()}원</span>
+        </div>
+      </div>
+    `).join('')}
+  </div>`;
+}
+
+// ── 탭 전환
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const names = ['orders','menu'];
+    t.classList.toggle('active', names[i] === tab);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => {
+    c.classList.toggle('active', c.id === 'tab-'+tab);
+  });
+}
+
+// ── 초기 로드
+document.getElementById('dateInput').value = todayKey();
+setTimeout(() => loadDate(), 600); // Firebase 모듈 로드 대기
+</script>
+</body>
+</html>
