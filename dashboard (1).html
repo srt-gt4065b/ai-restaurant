@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🍄 주문 관리 대시보드</title>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, onValue, update }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDnyqOJp16jFgTxUzbawrCcwYwX_IMMweQ",
+    authDomain: "ai-mgmt-2026-order-tracking.firebaseapp.com",
+    databaseURL: "https://ai-mgmt-2026-order-tracking-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "ai-mgmt-2026-order-tracking",
+    storageBucket: "ai-mgmt-2026-order-tracking.firebasestorage.app",
+    messagingSenderId: "354942019623",
+    appId: "1:354942019623:web:4688f3b5ac75b763cec602"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
+  window._db      = db;
+  window._ref     = ref;
+  window._onValue = onValue;
+  window._update  = update;
+  window._fbReady = true;
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:     #0f172a;
+  --surf:   #1e293b;
+  --bdr:    #334155;
+  --text:   #e2e8f0;
+  --muted:  #64748b;
+  --blue:   #3b82f6;
+  --green:  #10b981;
+  --yellow: #f59e0b;
+  --red:    #ef4444;
+  --orange: #f97316;
+  --purple: #8b5cf6;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Noto Sans KR',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+/* HEADER */
+.header {
+  background:linear-gradient(135deg,#1e40af,#3b82f6);
+  padding:14px 20px; display:flex; align-items:center; justify-content:space-between;
+  flex-wrap:wrap; gap:8px; border-bottom:3px solid #60a5fa;
+  position:sticky; top:0; z-index:50;
+}
+.header h1 { font-size:18px; font-weight:900; }
+.header p  { font-size:11px; opacity:.8; }
+.fb-badge  {
+  display:flex; align-items:center; gap:5px;
+  background:rgba(255,255,255,.15); border-radius:20px; padding:5px 12px; font-size:11px; font-weight:700;
+}
+.fb-dot     { width:8px; height:8px; border-radius:50%; background:#aaa; }
+.fb-dot.on  { background:#4eff7e; animation:blink 1.5s infinite; }
+.fb-dot.err { background:#ff4c4c; }
+@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+
+/* DATE BAR */
+.date-bar {
+  background:var(--surf); padding:10px 16px;
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  border-bottom:1px solid var(--bdr);
+}
+.date-bar label { font-size:12px; font-weight:700; color:var(--muted); }
+.date-input {
+  background:var(--bg); color:var(--text); border:2px solid var(--bdr);
+  border-radius:6px; padding:6px 10px; font-size:12px; font-family:'Noto Sans KR',sans-serif; outline:none;
+}
+.date-input:focus { border-color:var(--blue); }
+.btn-sm { padding:6px 12px; border:none; border-radius:6px; font-size:12px; font-weight:700; font-family:'Noto Sans KR',sans-serif; cursor:pointer; }
+.btn-today   { background:var(--blue);  color:white; }
+.btn-query   { background:#6366f1;      color:white; }
+.btn-refresh { background:var(--green); color:white; margin-left:auto; }
+
+/* KPI */
+.kpi-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:1px; background:var(--bdr); }
+.kpi-card  { background:var(--surf); padding:12px 14px; position:relative; overflow:hidden; }
+.kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+.kpi-card.blue::before   { background:var(--blue);   }
+.kpi-card.green::before  { background:var(--green);  }
+.kpi-card.yellow::before { background:var(--yellow); }
+.kpi-card.orange::before { background:var(--orange); }
+.kpi-card.purple::before { background:var(--purple); }
+.kpi-icon  { font-size:18px; margin-bottom:3px; }
+.kpi-label { font-size:10px; color:var(--muted); font-weight:700; }
+.kpi-value { font-size:20px; font-weight:900; }
+.kpi-sub   { font-size:10px; color:var(--muted); }
+
+/* TABS */
+.tabs {
+  display:flex; background:var(--surf); border-bottom:2px solid var(--bdr);
+  overflow-x:auto; -webkit-overflow-scrolling:touch;
+}
+.tab {
+  padding:11px 16px; font-size:12px; font-weight:700; cursor:pointer;
+  color:var(--muted); border-bottom:3px solid transparent; margin-bottom:-2px;
+  white-space:nowrap; transition:all .2s;
+}
+.tab.active         { color:var(--blue); border-bottom-color:var(--blue); }
+.tab:hover:not(.active) { color:#94a3b8; }
+.tab-content        { display:none; }
+.tab-content.active { display:block; }
+
+/* KANBAN */
+.kanban {
+  display:grid; grid-template-columns:repeat(3,1fr); gap:10px; padding:14px;
+}
+@media(max-width:640px) { .kanban { grid-template-columns:1fr; } }
+
+.k-col {
+  background:var(--surf); border-radius:10px; border:1px solid var(--bdr);
+  display:flex; flex-direction:column; min-height:300px;
+}
+.k-col-head {
+  padding:10px 12px; font-size:12px; font-weight:900;
+  display:flex; align-items:center; justify-content:space-between;
+  border-bottom:2px solid var(--bdr); border-radius:10px 10px 0 0;
+}
+.k-col-head.hn { background:#162032; border-left:4px solid var(--blue);   }
+.k-col-head.hc { background:#2a1800; border-left:4px solid var(--orange); }
+.k-col-head.hd { background:#02200f; border-left:4px solid var(--green);  }
+.col-cnt { font-size:10px; padding:2px 7px; border-radius:8px; font-weight:900; }
+.col-cnt.cn { background:var(--blue);   color:white; }
+.col-cnt.cc { background:var(--orange); color:white; }
+.col-cnt.cd { background:var(--green);  color:white; }
+
+.k-cards { padding:8px; display:flex; flex-direction:column; gap:7px; flex:1; }
+.k-empty { padding:24px 12px; text-align:center; color:var(--muted); font-size:11px; }
+
+/* ORDER CARD */
+.ocard {
+  background:var(--bg); border:1px solid var(--bdr); border-radius:8px;
+  padding:10px; transition:transform .15s, box-shadow .15s;
+}
+.ocard:hover { transform:translateY(-1px); box-shadow:0 3px 10px rgba(0,0,0,.4); }
+.ocard.sn { border-left:3px solid var(--blue);   }
+.ocard.sc { border-left:3px solid var(--orange); }
+.ocard.sd { border-left:3px solid var(--green); opacity:.8; }
+
+.ct { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; }
+.cname  { font-size:13px; font-weight:900; }
+.ctime  { font-size:10px; color:var(--muted); }
+.citems { font-size:11px; color:#94a3b8; line-height:1.7; margin-bottom:7px; }
+.cbot   { display:flex; align-items:center; flex-wrap:wrap; gap:5px; margin-bottom:7px; }
+.camount { font-size:13px; font-weight:900; color:var(--blue); }
+
+.pbadge     { font-size:10px; font-weight:700; padding:2px 6px; border-radius:6px; }
+.pbadge.pw  { background:#78350f44; color:#fbbf24; border:1px solid #92400e; }
+.pbadge.pp  { background:#05603544; color:#34d399; border:1px solid #065f46; }
+.meth-badge { font-size:10px; color:var(--muted); }
+
+/* ACTION BUTTONS */
+.abtns { display:flex; gap:5px; flex-wrap:wrap; }
+.ab {
+  padding:5px 9px; border:none; border-radius:5px; font-size:11px; font-weight:700;
+  font-family:'Noto Sans KR',sans-serif; cursor:pointer; transition:all .15s;
+}
+.ab-cook  { background:var(--orange); color:white; }
+.ab-cook:hover  { background:#ea580c; }
+.ab-done  { background:var(--green);  color:white; }
+.ab-done:hover  { background:#059669; }
+.ab-back  { background:#334155; color:#94a3b8; }
+.ab-back:hover  { background:#475569; }
+.ab-pay   { background:var(--yellow); color:#1a1a1a; }
+.ab-pay.paid    { background:var(--green); color:white; }
+
+/* TABLE */
+.section { padding:14px 16px; }
+.s-title { font-size:13px; font-weight:900; margin-bottom:10px; display:flex; align-items:center; gap:7px; }
+.order-table { width:100%; border-collapse:collapse; }
+.order-table th {
+  background:var(--surf); color:var(--muted); font-size:10px; font-weight:700;
+  padding:9px 8px; text-align:left; border-bottom:2px solid var(--bdr);
+}
+.order-table td { padding:9px 8px; border-bottom:1px solid #1e293b88; font-size:11px; vertical-align:top; }
+.order-table tr:hover td { background:#1e293b55; }
+.sbadge { display:inline-block; padding:2px 7px; border-radius:8px; font-size:10px; font-weight:700; }
+.sbadge.sw  { background:#78350f33; color:#fbbf24; border:1px solid #92400e; }
+.sbadge.sp  { background:#05603533; color:#34d399; border:1px solid #065f46; }
+.sbadge.sn  { background:#1e3a5f;   color:#93c5fd; border:1px solid #1d4ed8; }
+.sbadge.sc  { background:#3b220044; color:#fdba74; border:1px solid #9a3412; }
+.sbadge.sd  { background:#05603533; color:#6ee7b7; border:1px solid #065f46; }
+.acell { font-weight:900; color:var(--blue); }
+.ilist { font-size:10px; color:#94a3b8; line-height:1.7; }
+
+/* MENU STATS */
+.menu-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:8px; }
+.ms-card   { background:var(--surf); border:1px solid var(--bdr); border-radius:8px; padding:10px; }
+.ms-name   { font-size:11px; font-weight:700; margin-bottom:5px; }
+.ms-bar    { background:var(--bg); border-radius:3px; height:4px; margin:4px 0; overflow:hidden; }
+.ms-fill   { height:100%; background:var(--blue); border-radius:3px; transition:width .5s; }
+.ms-nums   { display:flex; justify-content:space-between; font-size:10px; color:var(--muted); }
+
+/* EMPTY / LOADING */
+.empty-s { text-align:center; padding:40px 16px; color:var(--muted); }
+.empty-s .ei { font-size:36px; margin-bottom:8px; }
+.loading { display:flex; align-items:center; justify-content:center; padding:36px; gap:10px; color:var(--muted); }
+.spinner { width:22px; height:22px; border:3px solid var(--bdr); border-top-color:var(--blue); border-radius:50%; animation:spin .8s linear infinite; }
+@keyframes spin { to{transform:rotate(360deg);} }
+
+/* TOAST */
+.toast {
+  position:fixed; bottom:20px; right:20px; background:var(--surf); color:var(--text);
+  padding:11px 16px; border-radius:10px; font-size:13px; font-weight:700;
+  border:1px solid var(--bdr); box-shadow:0 4px 14px rgba(0,0,0,.5);
+  transform:translateY(80px); opacity:0; transition:all .3s; z-index:999;
+}
+.toast.show { transform:translateY(0); opacity:1; }
+
+@media(max-width:600px) {
+  .order-table th, .order-table td { padding:6px 4px; }
+  .kpi-value { font-size:17px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div>
+    <h1>🍄 주문 관리 대시보드</h1>
+    <p>AI경영학과 · 실시간 주문 & 배달 관리</p>
+  </div>
+  <div class="fb-badge">
+    <div class="fb-dot" id="fbDot"></div>
+    <span id="fbStatus">연결 중...</span>
+  </div>
+</div>
+
+<!-- Date Bar -->
+<div class="date-bar">
+  <label>📅</label>
+  <input type="date" class="date-input" id="dateInput">
+  <button class="btn-sm btn-today"   onclick="goToday()">오늘</button>
+  <button class="btn-sm btn-query"   onclick="loadDate()">조회</button>
+  <button class="btn-sm btn-refresh" onclick="loadDate()">🔄 새로고침</button>
+</div>
+
+<!-- KPI -->
+<div class="kpi-strip">
+  <div class="kpi-card blue">
+    <div class="kpi-icon">🧾</div>
+    <div class="kpi-label">전체 주문</div>
+    <div class="kpi-value" id="kT">-</div>
+  </div>
+  <div class="kpi-card blue">
+    <div class="kpi-icon">🆕</div>
+    <div class="kpi-label">주문접수</div>
+    <div class="kpi-value" id="kN">-</div>
+  </div>
+  <div class="kpi-card orange">
+    <div class="kpi-icon">🔥</div>
+    <div class="kpi-label">준비중</div>
+    <div class="kpi-value" id="kC">-</div>
+  </div>
+  <div class="kpi-card green">
+    <div class="kpi-icon">✅</div>
+    <div class="kpi-label">배달완료</div>
+    <div class="kpi-value" id="kD">-</div>
+  </div>
+  <div class="kpi-card yellow">
+    <div class="kpi-icon">💰</div>
+    <div class="kpi-label">입금완료</div>
+    <div class="kpi-value" id="kP">-</div>
+    <div class="kpi-sub">건</div>
+  </div>
+  <div class="kpi-card purple">
+    <div class="kpi-icon">💵</div>
+    <div class="kpi-label">총 매출</div>
+    <div class="kpi-value" id="kR">-</div>
+    <div class="kpi-sub">원</div>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('kanban')">🚀 배달 현황판</div>
+  <div class="tab" onclick="switchTab('orders')">📋 전체 주문목록</div>
+  <div class="tab" onclick="switchTab('menu')">📊 메뉴별 통계</div>
+</div>
+
+<!-- Tab: 칸반 -->
+<div class="tab-content active" id="tab-kanban">
+  <div class="kanban">
+    <div class="k-col">
+      <div class="k-col-head hn">
+        <span>🆕 주문 접수</span>
+        <span class="col-cnt cn" id="cntN">0</span>
+      </div>
+      <div class="k-cards" id="colN">
+        <div class="k-empty">새 주문 없음</div>
+      </div>
+    </div>
+    <div class="k-col">
+      <div class="k-col-head hc">
+        <span>🔥 준비중</span>
+        <span class="col-cnt cc" id="cntC">0</span>
+      </div>
+      <div class="k-cards" id="colC">
+        <div class="k-empty">준비중 없음</div>
+      </div>
+    </div>
+    <div class="k-col">
+      <div class="k-col-head hd">
+        <span>✅ 배달 완료</span>
+        <span class="col-cnt cd" id="cntD">0</span>
+      </div>
+      <div class="k-cards" id="colD">
+        <div class="k-empty">완료 없음</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab: 주문목록 -->
+<div class="tab-content" id="tab-orders">
+  <div class="section">
+    <div class="s-title">
+      📋 전체 주문 목록
+      <span id="oBadge" style="background:var(--blue);color:white;font-size:10px;padding:2px 8px;border-radius:8px;">0건</span>
+    </div>
+    <div id="orderArea">
+      <div class="loading"><div class="spinner"></div> 불러오는 중...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab: 메뉴통계 -->
+<div class="tab-content" id="tab-menu">
+  <div class="section">
+    <div class="s-title">📊 메뉴별 판매 현황</div>
+    <div id="menuArea">
+      <div class="loading"><div class="spinner"></div> 불러오는 중...</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let orders = [];
+let dateKey = '';
+
+// ── 날짜
+const pad = n => String(n).padStart(2,'0');
+function todayKey() {
+  const n = new Date();
+  return `${n.getFullYear()}-${pad(n.getMonth()+1)}-${pad(n.getDate())}`;
+}
+function goToday() { document.getElementById('dateInput').value = todayKey(); loadDate(); }
+function loadDate() {
+  const dk = document.getElementById('dateInput').value;
+  if (!dk) return;
+  dateKey = dk;
+  subscribeOrders(dk);
+}
+
+// ── Firebase 구독
+function subscribeOrders(dk) {
+  if (!window._fbReady) { setTimeout(() => subscribeOrders(dk), 400); return; }
+  const r = window._ref(window._db, `orders/${dk}`);
+  window._onValue(r, snap => {
+    const d = snap.val();
+    orders = d
+      ? Object.entries(d).map(([k,v]) => ({key:k,...v}))
+          .sort((a,b) => (a.orderedAt||'').localeCompare(b.orderedAt||''))
+      : [];
+    renderAll();
+  });
+}
+
+// ── FB 상태
+let fbW = setInterval(() => {
+  if (window._fbReady) {
+    clearInterval(fbW);
+    document.getElementById('fbDot').className = 'fb-dot on';
+    document.getElementById('fbStatus').textContent = '실시간 연결됨';
+  }
+}, 300);
+
+// ── 필드 업데이트
+async function upd(key, data) {
+  if (!window._fbReady) return;
+  await window._update(window._ref(window._db, `orders/${dateKey}/${key}`), data);
+}
+
+// 배달 상태 변경
+async function setDS(key, status) {
+  const upObj = { deliveryStatus: status };
+  if (status === 'done')    upObj.deliveredAt = new Date().toISOString();
+  if (status === 'cooking') upObj.cookingAt   = new Date().toISOString();
+  await upd(key, upObj);
+  const msg = {new:'🆕 접수 상태로 변경', cooking:'🔥 준비 시작!', done:'✅ 배달 완료!'};
+  showToast(msg[status]);
+}
+
+// 결제 상태 토글
+async function togglePay(key, cur) {
+  const next = cur === 'paid' ? 'waiting' : 'paid';
+  const upObj = { payStatus: next };
+  if (next === 'paid') upObj.paidAt = new Date().toISOString();
+  await upd(key, upObj);
+  showToast(next === 'paid' ? '💰 입금 완료 처리됐어요!' : '⏳ 입금 대기로 변경됐어요');
+}
+
+// ── KPI
+function renderAll() {
+  const newO    = orders.filter(o => !o.deliveryStatus || o.deliveryStatus === 'new');
+  const cooking = orders.filter(o => o.deliveryStatus === 'cooking');
+  const done    = orders.filter(o => o.deliveryStatus === 'done');
+  const paid    = orders.filter(o => o.payStatus === 'paid');
+  const rev     = orders.reduce((s,o) => s+(o.totalAmount||0), 0);
+
+  document.getElementById('kT').textContent = orders.length;
+  document.getElementById('kN').textContent = newO.length;
+  document.getElementById('kC').textContent = cooking.length;
+  document.getElementById('kD').textContent = done.length;
+  document.getElementById('kP').textContent = paid.length;
+  document.getElementById('kR').textContent = rev.toLocaleString();
+  document.getElementById('oBadge').textContent = orders.length + '건';
+
+  renderKanban(newO, cooking, done);
+  renderTable(orders);
+  renderMenu(orders);
+}
+
+// ── 칸반
+function renderKanban(nO, cO, dO) {
+  document.getElementById('cntN').textContent = nO.length;
+  document.getElementById('cntC').textContent = cO.length;
+  document.getElementById('cntD').textContent = dO.length;
+  document.getElementById('colN').innerHTML = nO.length ? nO.map(cardHtml).join('') : '<div class="k-empty">새 주문 없음 🎉</div>';
+  document.getElementById('colC').innerHTML = cO.length ? cO.map(cardHtml).join('') : '<div class="k-empty">준비중 없음</div>';
+  document.getElementById('colD').innerHTML = dO.length ? dO.map(cardHtml).join('') : '<div class="k-empty">완료 없음</div>';
+}
+
+function cardHtml(o) {
+  const ds      = o.deliveryStatus || 'new';
+  const ps      = o.payStatus || 'waiting';
+  const time    = o.orderedAt ? new Date(o.orderedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}) : '-';
+  const items   = (o.items||[]).map(i=>`${i.name} ×${i.qty}`).join(' · ');
+  const pmLabel = o.payMethod === 'cash' ? '💵 현금'
+    : o.payMethod === 'transfer'
+      ? (o.bankChoice === 'kakao' ? '🐯 카카오' : '🏦 새마을')
+      : '';
+
+  // 배달 액션 버튼
+  let abtns = '';
+  if (ds === 'new')     abtns = `<button class="ab ab-cook" onclick="setDS('${o.key}','cooking')">🔥 준비시작</button>`;
+  else if (ds==='cooking') abtns = `
+    <button class="ab ab-done" onclick="setDS('${o.key}','done')">✅ 배달완료</button>
+    <button class="ab ab-back" onclick="setDS('${o.key}','new')">↩ 되돌리기</button>`;
+  else abtns = `<button class="ab ab-back" onclick="setDS('${o.key}','new')">↩ 재접수</button>`;
+
+  return `<div class="ocard s${ds.charAt(0)}">
+    <div class="ct">
+      <span class="cname">👤 ${o.customerName||'손님'}</span>
+      <span class="ctime">${time}</span>
+    </div>
+    <div class="citems">${items}</div>
+    <div class="cbot">
+      <span class="camount">${(o.totalAmount||0).toLocaleString()}원</span>
+      <span class="pbadge p${ps.charAt(0)}">${ps==='paid'?'✅ 입금완료':'⏳ 대기중'}</span>
+      ${pmLabel ? `<span class="meth-badge">${pmLabel}</span>` : ''}
+    </div>
+    <div class="abtns">
+      ${abtns}
+      <button class="ab ab-pay ${ps==='paid'?'paid':''}" onclick="togglePay('${o.key}','${ps}')">
+        ${ps==='paid'?'💰 입금확인':'💳 입금처리'}
+      </button>
+    </div>
+  </div>`;
+}
+
+// ── 주문 목록 테이블
+function renderTable(ords) {
+  const area = document.getElementById('orderArea');
+  if (!ords.length) {
+    area.innerHTML = `<div class="empty-s"><div class="ei">🍄</div><p>주문이 없어요</p></div>`;
+    return;
+  }
+  const DL = {new:'🆕 접수', cooking:'🔥 준비중', done:'✅ 완료'};
+  area.innerHTML = `<div style="overflow-x:auto;"><table class="order-table">
+    <thead><tr>
+      <th>시간</th><th>주문자</th><th>주문 내역</th>
+      <th>금액</th><th>결제상태</th><th>배달상태</th><th>결제방식</th>
+    </tr></thead>
+    <tbody>
+    ${[...ords].reverse().map(o => {
+      const t  = o.orderedAt ? new Date(o.orderedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}) : '-';
+      const it = (o.items||[]).map(i=>`${i.name}×${i.qty}`).join('<br>');
+      const ds = o.deliveryStatus||'new';
+      const ps = o.payStatus||'waiting';
+      const pm = o.payMethod==='cash' ? '💵 현금'
+        : o.payMethod==='transfer'
+          ? (o.bankChoice==='kakao'?'🐯 카카오':'🏦 새마을')
+          : '-';
+      return `<tr>
+        <td style="white-space:nowrap;color:#94a3b8;">${t}</td>
+        <td style="font-weight:700;">${o.customerName||'손님'}</td>
+        <td><div class="ilist">${it}</div></td>
+        <td class="acell">${(o.totalAmount||0).toLocaleString()}원</td>
+        <td><span class="sbadge s${ps.charAt(0)}">${ps==='paid'?'✅입금':'⏳대기'}</span></td>
+        <td><span class="sbadge s${ds.charAt(0)}">${DL[ds]||ds}</span></td>
+        <td style="font-size:10px;color:#94a3b8;">${pm}</td>
+      </tr>`;
+    }).join('')}
+    </tbody>
+  </table></div>`;
+}
+
+// ── 메뉴 통계
+function renderMenu(ords) {
+  const area = document.getElementById('menuArea');
+  if (!ords.length) {
+    area.innerHTML = `<div class="empty-s"><div class="ei">📊</div><p>데이터 없음</p></div>`;
+    return;
+  }
+  const map = {};
+  ords.forEach(o => (o.items||[]).forEach(i => {
+    if (!map[i.name]) map[i.name] = {qty:0, rev:0};
+    map[i.name].qty += i.qty;
+    map[i.name].rev += i.subtotal || (i.price*i.qty);
+  }));
+  const sorted = Object.entries(map).sort((a,b) => b[1].qty-a[1].qty);
+  const maxQ   = sorted[0]?.[1].qty || 1;
+  area.innerHTML = `<div class="menu-grid">
+    ${sorted.map(([n,s]) => `
+      <div class="ms-card">
+        <div class="ms-name">${n}</div>
+        <div class="ms-bar"><div class="ms-fill" style="width:${Math.round(s.qty/maxQ*100)}%"></div></div>
+        <div class="ms-nums"><span>📦 ${s.qty}개</span><span>💰 ${s.rev.toLocaleString()}원</span></div>
+      </div>`).join('')}
+  </div>`;
+}
+
+// ── 탭 전환
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t,i) =>
+    t.classList.toggle('active', ['kanban','orders','menu'][i]===tab));
+  document.querySelectorAll('.tab-content').forEach(c =>
+    c.classList.toggle('active', c.id==='tab-'+tab));
+}
+
+// ── 토스트
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── 초기화
+document.getElementById('dateInput').value = todayKey();
+setTimeout(() => loadDate(), 600);
+</script>
+</body>
+</html>
